@@ -1,0 +1,3 @@
+/var/database.sqlite
+/var/*.sqlite
+.DS_Store
