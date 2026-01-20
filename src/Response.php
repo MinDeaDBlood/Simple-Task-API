@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App;
 
 class Response
@@ -17,19 +19,26 @@ class Response
 
     public static function json(mixed $data, int $statusCode = 200): self
     {
-        return new self($statusCode, ['Content-Type' => 'application/json'], $data);
+        return new self($statusCode, ['Content-Type' => 'application/json; charset=utf-8'], $data);
     }
 
     public function emit(): void
     {
         http_response_code($this->statusCode);
 
+        // Отправляем заголовки всегда (для CORS, кэша и т.д.)
         foreach ($this->headers as $name => $value) {
             header("$name: $value");
         }
 
+        // Для 204 No Content не отправляем тело
+        if ($this->statusCode === 204) {
+            return;
+        }
+
         if ($this->body !== null) {
-            if (isset($this->headers['Content-Type']) && $this->headers['Content-Type'] === 'application/json') {
+            $contentType = $this->headers['Content-Type'] ?? '';
+            if (str_contains(strtolower($contentType), 'application/json')) {
                 echo json_encode($this->body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             } else {
                 echo $this->body;

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App;
 
 class TaskController
@@ -16,7 +18,7 @@ class TaskController
         $validation = Validator::validateListQuery($request->getQuery());
 
         if (!$validation['ok']) {
-            return Response::json(['errors' => $validation['errors']], 400);
+            return Response::json(['errors' => $validation['errors']], 422);
         }
 
         $result = $this->repository->list($validation['data']);
@@ -29,14 +31,21 @@ class TaskController
             return $this->badJson();
         }
 
-        $validation = Validator::validateCreate($request->getBody());
+        $body = $request->getBody();
+        
+        // Проверка на битый JSON
+        if (is_array($body) && ($body['__invalid_json'] ?? false)) {
+            return Response::json(['error' => 'Invalid JSON: ' . ($body['__json_error'] ?? 'Malformed JSON')], 400);
+        }
+
+        $validation = Validator::validateCreate($body);
 
         if (!$validation['ok']) {
-            return Response::json(['errors' => $validation['errors']], 400);
+            return Response::json(['errors' => $validation['errors']], 422);
         }
 
         $task = $this->repository->create($validation['data']);
-        return Response::json($task, 201);
+        return Response::json(['data' => $task], 201);
     }
 
     public function show(Request $request, array $params): Response
@@ -48,7 +57,7 @@ class TaskController
             return Response::json(['error' => 'Task not found'], 404);
         }
 
-        return Response::json($task, 200);
+        return Response::json(['data' => $task], 200);
     }
 
     public function patch(Request $request, array $params): Response
@@ -57,6 +66,13 @@ class TaskController
             return $this->badJson();
         }
 
+        $body = $request->getBody();
+        
+        // Проверка на битый JSON
+        if (is_array($body) && ($body['__invalid_json'] ?? false)) {
+            return Response::json(['error' => 'Invalid JSON: ' . ($body['__json_error'] ?? 'Malformed JSON')], 400);
+        }
+
         $id = (int)$params['id'];
         $task = $this->repository->find($id);
 
@@ -64,14 +80,14 @@ class TaskController
             return Response::json(['error' => 'Task not found'], 404);
         }
 
-        $validation = Validator::validatePatch($request->getBody());
+        $validation = Validator::validatePatch($body);
 
         if (!$validation['ok']) {
-            return Response::json(['errors' => $validation['errors']], 400);
+            return Response::json(['errors' => $validation['errors']], 422);
         }
 
         $updated = $this->repository->patch($id, $validation['data']);
-        return Response::json($updated, 200);
+        return Response::json(['data' => $updated], 200);
     }
 
     public function put(Request $request, array $params): Response
@@ -80,6 +96,13 @@ class TaskController
             return $this->badJson();
         }
 
+        $body = $request->getBody();
+        
+        // Проверка на битый JSON
+        if (is_array($body) && ($body['__invalid_json'] ?? false)) {
+            return Response::json(['error' => 'Invalid JSON: ' . ($body['__json_error'] ?? 'Malformed JSON')], 400);
+        }
+
         $id = (int)$params['id'];
         $task = $this->repository->find($id);
 
@@ -87,14 +110,14 @@ class TaskController
             return Response::json(['error' => 'Task not found'], 404);
         }
 
-        $validation = Validator::validatePut($request->getBody());
+        $validation = Validator::validatePut($body);
 
         if (!$validation['ok']) {
-            return Response::json(['errors' => $validation['errors']], 400);
+            return Response::json(['errors' => $validation['errors']], 422);
         }
 
         $updated = $this->repository->put($id, $validation['data']);
-        return Response::json($updated, 200);
+        return Response::json(['data' => $updated], 200);
     }
 
     public function destroy(Request $request, array $params): Response
@@ -112,7 +135,7 @@ class TaskController
     private function isJson(Request $request): bool
     {
         $headers = $request->getHeaders();
-        $contentType = $headers['content-type'] ?? '';
+        $contentType = strtolower($headers['content-type'] ?? '');
         return str_contains($contentType, 'application/json');
     }
 

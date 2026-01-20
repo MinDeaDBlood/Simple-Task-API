@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App;
 
 use PDO;
@@ -16,7 +18,8 @@ class TaskRepository
     public function create(array $data): array
     {
         $stmt = $this->pdo->prepare(
-            'INSERT INTO tasks (title, description, status) VALUES (:title, :description, :status)'
+            "INSERT INTO tasks (title, description, status, created_at, updated_at) 
+             VALUES (:title, :description, :status, datetime('now'), datetime('now'))"
         );
 
         $stmt->execute([
@@ -47,12 +50,20 @@ class TaskRepository
 
     public function patch(int $id, array $data): ?array
     {
+        $allowed = ['title', 'description', 'status'];
         $fields = [];
         $params = ['id' => $id];
 
         foreach ($data as $key => $value) {
+            if (!in_array($key, $allowed, true)) {
+                continue;
+            }
             $fields[] = "$key = :$key";
             $params[$key] = $value;
+        }
+
+        if (empty($fields)) {
+            return $this->find($id);
         }
 
         $fields[] = 'updated_at = datetime(\'now\')';
@@ -61,7 +72,7 @@ class TaskRepository
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
 
-        return $stmt->rowCount() > 0 ? $this->find($id) : null;
+        return $this->find($id);
     }
 
     public function put(int $id, array $data): ?array
@@ -77,14 +88,14 @@ class TaskRepository
             'status' => $data['status'],
         ]);
 
-        return $stmt->rowCount() > 0 ? $this->find($id) : null;
+        return $this->find($id);
     }
 
     public function list(array $filters = []): array
     {
         $page = $filters['page'] ?? 1;
-        $limit = $filters['limit'] ?? 10;
-        $offset = ($page - 1) * $limit;
+        $limit = $filters['limit'] ?? null;
+        $hasPagination = $limit !== null;
 
         $where = [];
         $params = [];
@@ -107,46 +118,67 @@ class TaskRepository
 
         $orderBy = $this->parseSort($filters['sort'] ?? 'created_at:desc');
 
-        $sql = "SELECT * FROM tasks $whereClause ORDER BY $orderBy LIMIT :limit OFFSET :offset";
+        // Build query with optional pagination
+        if ($hasPagination) {
+            $offset = ($page - 1) * $limit;
+            $sql = "SELECT * FROM tasks $whereClause ORDER BY $orderBy LIMIT :limit OFFSET :offset";
+        } else {
+            $sql = "SELECT * FROM tasks $whereClause ORDER BY $orderBy";
+        }
+
         $stmt = $this->pdo->prepare($sql);
 
         foreach ($params as $key => $value) {
             $stmt->bindValue(":$key", $value);
         }
-        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+
+        if ($hasPagination) {
+            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        }
 
         $stmt->execute();
         $rows = $stmt->fetchAll();
 
         $tasks = array_map([$this, 'map'], $rows);
 
-        $totalPages = (int)ceil($total / $limit);
+        // Build response with optional pagination metadata
+        if ($hasPagination) {
+            $totalPages = max(1, (int)ceil($total / $limit));
 
-        $links = [
-            'self' => $this->buildListLink($filters, $page),
-            'first' => $this->buildListLink($filters, 1),
-            'last' => $this->buildListLink($filters, max(1, $totalPages)),
-        ];
+            $links = [
+                'self' => $this->buildListLink($filters, $page),
+                'first' => $this->buildListLink($filters, 1),
+                'last' => $this->buildListLink($filters, max(1, $totalPages)),
+            ];
 
-        if ($page > 1) {
-            $links['prev'] = $this->buildListLink($filters, $page - 1);
+            if ($page > 1) {
+                $links['prev'] = $this->buildListLink($filters, $page - 1);
+            }
+
+            if ($page < $totalPages) {
+                $links['next'] = $this->buildListLink($filters, $page + 1);
+            }
+
+            return [
+                'data' => $tasks,
+                'meta' => [
+                    'total' => $total,
+                    'page' => $page,
+                    'limit' => $limit,
+                    'total_pages' => $totalPages,
+                ],
+                'links' => $links,
+            ];
+        } else {
+            // No pagination - return all tasks
+            return [
+                'data' => $tasks,
+                'meta' => [
+                    'total' => $total,
+                ],
+            ];
         }
-
-        if ($page < $totalPages) {
-            $links['next'] = $this->buildListLink($filters, $page + 1);
-        }
-
-        return [
-            'data' => $tasks,
-            'meta' => [
-                'total' => $total,
-                'page' => $page,
-                'limit' => $limit,
-                'total_pages' => $totalPages,
-            ],
-            'links' => $links,
-        ];
     }
 
     private function map(array $row): array
@@ -170,11 +202,11 @@ class TaskRepository
         $allowedFields = ['id', 'title', 'status', 'created_at', 'updated_at'];
         $allowedDirections = ['ASC', 'DESC'];
 
-        if (!in_array($field, $allowedFields)) {
+        if (!in_array($field, $allowedFields, true)) {
             $field = 'created_at';
         }
 
-        if (!in_array($direction, $allowedDirections)) {
+        if (!in_array($direction, $allowedDirections, true)) {
             $direction = 'DESC';
         }
 

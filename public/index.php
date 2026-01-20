@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 require_once __DIR__ . '/../src/bootstrap.php';
 
 use App\Database;
@@ -29,8 +31,11 @@ try {
     $response = $router->dispatch($request);
     $response->emit();
 
-} catch (\Exception $e) {
+} catch (\Throwable $e) {
+    // Логирование ошибки (в production логировать в файл)
+    error_log('API Error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+    
     http_response_code(500);
     header('Content-Type: application/json');
-    echo json_encode(['error' => 'Internal Server Error', 'message' => $e->getMessage()]);
+    echo json_encode(['error' => 'Internal Server Error']);
 }

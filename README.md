@@ -17,8 +17,10 @@ A lightweight REST API for task management built with pure PHP (no frameworks). 
 ## Requirements
 
 - PHP 8.1 or higher
-- PDO SQLite extension
+- PDO SQLite extension (usually included by default)
 - Built-in PHP development server or Apache/Nginx
+
+**Note**: No additional PHP extensions required. The project uses standard PHP functions only.
 
 ## Quick Start
 
@@ -41,9 +43,48 @@ php -S localhost:8000 -t public
 curl http://localhost:8000/tasks
 ```
 
+### Automated Testing
+
+Run the comprehensive test suite (PowerShell):
+
+```powershell
+.\test-api.ps1
+```
+
+This will test all endpoints including:
+- CRUD operations
+- Validation (400, 422 status codes)
+- Null value handling
+- Query parameters
+- Error responses
+
 ## Environment Variables
 
+The API supports configuration via environment variables:
+
 - `DB_PATH` - Path to SQLite database file (default: `var/database.sqlite`)
+
+### Using .env file
+
+Copy `.env.example` to `.env` and customize the values:
+
+```bash
+cp .env.example .env
+```
+
+The application will automatically load variables from `.env` file if it exists.
+
+### Manual environment variables
+
+Alternatively, set environment variables directly:
+
+```bash
+# Windows (PowerShell)
+$env:DB_PATH = "C:\path\to\database.sqlite"
+
+# Linux/Mac
+export DB_PATH=/path/to/database.sqlite
+```
 
 ## Task Model
 
@@ -58,20 +99,38 @@ curl http://localhost:8000/tasks
 
 ## API Endpoints
 
+### Required by Specification
+
+The following endpoints fulfill the original requirements:
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/tasks` | Create new task (title, description, status) |
+| GET | `/tasks` | Returns all tasks |
+| GET | `/tasks/{id}` | View single task |
+| PUT | `/tasks/{id}` | Update task |
+| DELETE | `/tasks/{id}` | Delete task |
+
+**Additional Features** (not required by specification): PATCH for partial updates, filtering (`?status=`), search (`?search=`), sorting (`?sort=`), optional pagination (`?limit=`).
+
+---
+
 ### List Tasks
 
 ```
 GET /tasks
 ```
 
+**Returns all tasks.** Pagination is enabled when `limit` parameter is provided.
+
 Query parameters:
 - `status` - Filter by status (pending, in_progress, done)
 - `search` - Search in title and description
 - `sort` - Sort field and direction (e.g., `created_at:desc`, `title:asc`)
-- `page` - Page number (default: 1)
-- `limit` - Items per page (default: 10, max: 100)
+- `limit` - Items per page (1-100). If not specified, returns all tasks
+- `page` - Page number (default: 1, only used when `limit` is specified)
 
-Response:
+Response without pagination:
 
 ```json
 {
@@ -86,15 +145,27 @@ Response:
     }
   ],
   "meta": {
-    "total": 1,
+    "total": 1
+  }
+}
+```
+
+Response with pagination (`?limit=10`):
+
+```json
+{
+  "data": [...],
+  "meta": {
+    "total": 25,
     "page": 1,
     "limit": 10,
-    "total_pages": 1
+    "total_pages": 3
   },
   "links": {
-    "self": "/tasks?page=1",
-    "first": "/tasks?page=1",
-    "last": "/tasks?page=1"
+    "self": "/tasks?page=1&limit=10",
+    "first": "/tasks?page=1&limit=10",
+    "last": "/tasks?page=3&limit=10",
+    "next": "/tasks?page=2&limit=10"
   }
 }
 ```
@@ -220,9 +291,11 @@ curl -X DELETE http://localhost:8000/tasks/1
 | 200 | OK - Request successful |
 | 201 | Created - Resource created successfully |
 | 204 | No Content - Resource deleted successfully |
-| 400 | Bad Request - Validation error |
+| 400 | Bad Request - Malformed JSON |
 | 404 | Not Found - Resource not found |
+| 405 | Method Not Allowed - HTTP method not supported for this endpoint |
 | 415 | Unsupported Media Type - Content-Type must be application/json |
+| 422 | Unprocessable Entity - Validation errors |
 | 500 | Internal Server Error - Server error |
 
 ## Project Structure
@@ -249,5 +322,13 @@ curl -X DELETE http://localhost:8000/tasks/1
 │   └── Validator.php           # Input validation
 ├── var/
 │   └── .gitkeep                # Database directory
+├── .env.example                # Environment variables example
+├── .gitignore                  # Git exclusions
+├── LICENSE                     # MIT License
+├── test-api.ps1                # Automated test suite
 └── README.md
 ```
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

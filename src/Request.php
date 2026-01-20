@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App;
 
 class Request
@@ -22,7 +24,9 @@ class Request
     public static function fromGlobals(): self
     {
         $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-        $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
+        $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
+        $path = rtrim($path, '/');
+        $path = $path === '' ? '/' : $path;
         $query = $_GET;
 
         $headers = [];
@@ -33,11 +37,27 @@ class Request
             }
         }
 
+        // Content-Type и Content-Length не имеют префикса HTTP_
+        if (isset($_SERVER['CONTENT_TYPE'])) {
+            $headers['content-type'] = $_SERVER['CONTENT_TYPE'];
+        }
+        if (isset($_SERVER['CONTENT_LENGTH'])) {
+            $headers['content-length'] = $_SERVER['CONTENT_LENGTH'];
+        }
+
         $body = null;
         $contentType = $headers['content-type'] ?? '';
-        if (str_contains($contentType, 'application/json')) {
-            $rawBody = file_get_contents('php://input');
-            $body = json_decode($rawBody, true);
+        if (str_contains(strtolower($contentType), 'application/json')) {
+            $rawBody = file_get_contents('php://input') ?: '';
+            
+            if ($rawBody !== '') {
+                $body = json_decode($rawBody, true);
+                
+                // Проверка на битый JSON
+                if (json_last_error() !== JSON_ERROR_NONE) {
+                    $body = ['__invalid_json' => true, '__json_error' => json_last_error_msg()];
+                }
+            }
         }
 
         return new self($method, $path, $query, $headers, $body);
